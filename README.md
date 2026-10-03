@@ -1,8 +1,10 @@
 # Scraper for Facebook events
 
-Small Facebook event digest app that runs weekly & emails them (specialized for upcoming Bangladesh public technical competition events, sorted by proximity to Dhaka to better fit my needs).
+Small Facebook event digest app that runs weekly & emails them.
 
 ## Local setup
+
+The following steps are automated in `setup-firefox-github-actions.sh` Bash script.
 
 1. Install dependencies:
 
@@ -39,6 +41,6 @@ Small Facebook event digest app that runs weekly & emails them (specialized for 
 
 ## Notes
 
-- The scheduled job reuses the saved authenticated session & does not require a Facebook password.
+- The scheduled job reuses the saved authenticated session & doesn't require a Facebook password.
 - If login checkpoints, CAPTCHA, or re-authentication pages appear, the run stops & sends an error email.
-- Only public event details are collected: title, date/time, location, distance from Dhaka (if resolvable), & event link.
+- Only public event details are collected: title, schedule, location, distance from Dhaka (if resolvable) & event link on Facebook.
