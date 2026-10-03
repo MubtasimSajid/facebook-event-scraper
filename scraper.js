@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const fs = require('fs');
 const nodemailer = require('nodemailer');
-const { chromium } = require('playwright');
+const { firefox } = require('playwright');
 const {
   dedupeEvents,
   haversineDistanceKm,
@@ -209,7 +209,7 @@ async function run() {
     throw new Error(`Storage state file not found at ${config.storageStatePath}.`);
   }
 
-  const browser = await chromium.launch({ headless: true });
+  const browser = await firefox.launch({ headless: true });
   const context = await browser.newContext({ storageState: config.storageStatePath });
   const page = await context.newPage();
 
