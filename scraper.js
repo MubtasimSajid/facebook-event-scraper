@@ -3,12 +3,6 @@ require("dotenv").config();
 const fs = require("fs");
 const nodemailer = require("nodemailer");
 const { firefox } = require("playwright");
-const {
-  dedupeEvents,
-  isUpcoming,
-  parseEventStartDate,
-  sortEvents,
-} = require("./digest-utils");
 
 const SEARCH_KEYWORDS = [
   "programming contest",
@@ -25,15 +19,6 @@ const SEARCH_KEYWORDS = [
   "informatics olympiad",
   "algorithm competition",
   "technology competition",
-];
-
-const AUTH_BLOCK_PATTERNS = [
-  /\/login/i,
-  /checkpoint/i,
-  /captcha/i,
-  /suspicious/i,
-  /reauth/i,
-  /two_factor/i,
 ];
 
 function getConfig() {
@@ -68,64 +53,65 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function extractJsonLdEvent(page) {
-  return page.evaluate(() => {
-    const scripts = Array.from(
-      document.querySelectorAll('script[type="application/ld+json"]'),
-    );
-
-    for (const script of scripts) {
-      try {
-        const parsed = JSON.parse(script.textContent || "null");
-
-        const records = Array.isArray(parsed)
-          ? parsed
-          : Array.isArray(parsed?.["@graph"])
-            ? parsed["@graph"]
-            : [parsed];
-
-        for (const record of records) {
-          const type = Array.isArray(record?.["@type"])
-            ? record["@type"].join(",")
-            : record?.["@type"];
-
-          if (!type || !String(type).toLowerCase().includes("event")) {
-            continue;
-          }
-
-          return {
-            title: record.name || null,
-            startDateRaw: record.startDate || null,
-            location:
-              record.location?.name ||
-              record.location?.address?.streetAddress ||
-              record.location?.address?.addressLocality ||
-              null,
-            description: record.description || null,
-            link: record.url || null,
-          };
-        }
-      } catch {
-        continue;
-      }
-    }
-
+function normalizeEventLink(link) {
+  if (!link) {
     return null;
-  });
+  }
+
+  try {
+    const url = new URL(link, "https://www.facebook.com");
+
+    url.hash = "";
+    url.search = "";
+
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
 }
 
-function hasAuthOrChallengeIssue(url, pageText) {
-  if (AUTH_BLOCK_PATTERNS.some((pattern) => pattern.test(url))) {
+function cleanEventName(name) {
+  if (!name) {
+    return null;
+  }
+
+  const cleaned = name.replace(/\s+/g, " ").trim();
+
+  if (!cleaned) {
+    return null;
+  }
+
+  const genericNames = new Set([
+    "events",
+    "event",
+    "see more",
+    "learn more",
+    "interested",
+    "going",
+    "share",
+    "facebook",
+  ]);
+
+  if (genericNames.has(cleaned.toLowerCase())) {
+    return null;
+  }
+
+  return cleaned;
+}
+
+function hasAuthOrChallengeIssue(url, pageTitle) {
+  const currentUrl = url || "";
+  const normalizedTitle = (pageTitle || "").toLowerCase();
+
+  if (/\/(login|checkpoint|recover)(\/|$|\?)/i.test(currentUrl)) {
     return true;
   }
 
-  const text = (pageText || "").toLowerCase();
-
   return (
-    text.includes("security check") ||
-    text.includes("suspicious login") ||
-    text.includes("enter the code we sent") ||
-    text.includes("captcha")
+    normalizedTitle.includes("security check") ||
+    normalizedTitle.includes("suspicious login") ||
+    normalizedTitle.includes("code verification") ||
+    normalizedTitle.includes("captcha")
   );
 }
 
@@ -133,45 +119,118 @@ async function assertAuthenticated(page) {
   await delay(1500);
 
   const currentUrl = page.url();
-  const text = await page.textContent("body").catch(() => "");
+  const pageTitle = await page.title().catch(() => "");
 
-  if (hasAuthOrChallengeIssue(currentUrl, text)) {
+  console.log(`Facebook page URL: ${currentUrl}`);
+  console.log(`Facebook page title: ${pageTitle}`);
+
+  if (hasAuthOrChallengeIssue(currentUrl, pageTitle)) {
     throw new Error(
       "Authentication challenge detected (login/checkpoint/captcha).",
     );
   }
 }
 
-async function collectEventLinks(page) {
+async function collectEventsFromSearchResults(page) {
   for (let i = 0; i < 4; i += 1) {
     await page.mouse.wheel(0, 1500);
     await delay(1200);
   }
 
-  const links = await page.evaluate(() => {
-    return Array.from(document.querySelectorAll('a[href*="/events/"]'))
-      .map((anchor) => anchor.href)
-      .filter((href) => href.includes("/events/"));
+  const events = await page.evaluate(() => {
+    function cleanText(value) {
+      return value ? value.replace(/\s+/g, " ").trim() : "";
+    }
+
+    function isEventDetailUrl(href) {
+      try {
+        const url = new URL(href, window.location.origin);
+
+        return /^\/events\/\d+/i.test(url.pathname);
+      } catch {
+        return false;
+      }
+    }
+
+    function getCandidateName(anchor) {
+      const ariaLabel = cleanText(anchor.getAttribute("aria-label"));
+      const titleAttribute = cleanText(anchor.getAttribute("title"));
+      const anchorText = cleanText(anchor.innerText || anchor.textContent);
+
+      return ariaLabel || titleAttribute || anchorText;
+    }
+
+    const results = [];
+
+    for (const anchor of document.querySelectorAll("a[href]")) {
+      const href = anchor.href;
+
+      if (!isEventDetailUrl(href)) {
+        continue;
+      }
+
+      let name = getCandidateName(anchor);
+
+      if (!name) {
+        const parent = anchor.parentElement;
+
+        if (parent) {
+          name = cleanText(parent.innerText || parent.textContent);
+        }
+      }
+
+      if (!name) {
+        continue;
+      }
+
+      results.push({
+        name,
+        link: href,
+      });
+    }
+
+    return results;
   });
 
-  return [...new Set(links)];
+  return events;
+}
+
+function dedupeEvents(events) {
+  const seen = new Set();
+  const deduped = [];
+
+  for (const event of events) {
+    const link = normalizeEventLink(event.link);
+
+    if (!link || seen.has(link)) {
+      continue;
+    }
+
+    seen.add(link);
+
+    deduped.push({
+      name: event.name,
+      link,
+    });
+  }
+
+  return deduped;
 }
 
 function buildDigestBody(events) {
   if (events.length === 0) {
-    return "No upcoming public events were found in the Facebook search results this week.";
+    return "No events were found in the Facebook search results this week.";
   }
 
-  return events
-    .map((event) =>
-      [
-        `Event title: ${event.title}`,
-        `Event date & time: ${event.startDate.toISOString()}`,
-        `Event location: ${event.location || "Unknown"}`,
-        `Facebook event link: ${event.link}`,
-      ].join("\n"),
-    )
-    .join("\n\n");
+  return [
+    `Found ${events.length} Facebook event${events.length === 1 ? "" : "s"}:`,
+    "",
+    ...events.flatMap((event, index) => [
+      `${index + 1}. ${event.name}`,
+      event.link,
+      "",
+    ]),
+  ].join("\n");
 }
 
 async function sendEmail(config, subject, body) {
@@ -195,6 +254,7 @@ async function sendEmail(config, subject, body) {
 
 async function run() {
   const config = getConfig();
+
   validateConfig(config);
 
   if (!fs.existsSync(config.storageStatePath)) {
@@ -203,19 +263,27 @@ async function run() {
     );
   }
 
-  const browser = await firefox.launch({ headless: true });
+  const browser = await firefox.launch({
+    headless: true,
+  });
+
   const context = await browser.newContext({
     storageState: config.storageStatePath,
   });
+
   const page = await context.newPage();
 
   try {
-    const discoveredLinks = new Set();
+    const discoveredEvents = [];
 
     for (const keyword of SEARCH_KEYWORDS) {
+      const searchTerm = `${keyword} Bangladesh`;
+
       const searchUrl =
         `https://www.facebook.com/events/search/?q=` +
-        `${encodeURIComponent(`${keyword} Bangladesh`)}`;
+        `${encodeURIComponent(searchTerm)}`;
+
+      console.log(`Searching Facebook for: ${searchTerm}`);
 
       await page.goto(searchUrl, {
         waitUntil: "domcontentloaded",
@@ -224,52 +292,19 @@ async function run() {
 
       await assertAuthenticated(page);
 
-      const links = await collectEventLinks(page);
+      const events = await collectEventsFromSearchResults(page);
 
-      links.forEach((link) => discoveredLinks.add(link));
+      console.log(`Found ${events.length} event link(s) for "${searchTerm}".`);
+
+      discoveredEvents.push(...events);
 
       await delay(1500);
     }
 
-    const collectedEvents = [];
+    const finalEvents = dedupeEvents(discoveredEvents);
 
-    for (const link of discoveredLinks) {
-      try {
-        await page.goto(link, {
-          waitUntil: "domcontentloaded",
-          timeout: 60000,
-        });
+    console.log(`Total unique events found: ${finalEvents.length}`);
 
-        await assertAuthenticated(page);
-
-        const event = await extractJsonLdEvent(page);
-
-        if (!event || !event.title || !event.startDateRaw) {
-          await delay(800);
-          continue;
-        }
-
-        const startDate = parseEventStartDate(event.startDateRaw);
-
-        if (!isUpcoming(startDate)) {
-          await delay(800);
-          continue;
-        }
-
-        collectedEvents.push({
-          title: event.title,
-          startDate,
-          location: event.location,
-          link: event.link || link,
-        });
-
-        await delay(1000);
-      } catch {
-        await delay(800);
-      }
-    }
-
-    const finalEvents = sortEvents(dedupeEvents(collectedEvents));
     const body = buildDigestBody(finalEvents);
 
     await sendEmail(
@@ -277,6 +312,8 @@ async function run() {
       `Facebook Event Digest - ${new Date().toISOString().slice(0, 10)}`,
       body,
     );
+
+    console.log("Digest email sent successfully.");
   } finally {
     await context.close();
     await browser.close();
@@ -295,7 +332,9 @@ run().catch(async (error) => {
     try {
       await sendEmail(
         config,
-        `Facebook Event Digest Error - ${new Date().toISOString().slice(0, 10)}`,
+        `Facebook Event Digest Error - ${new Date()
+          .toISOString()
+          .slice(0, 10)}`,
         `The scraper stopped because of an error:\n\n${error.message}`,
       );
     } catch {
