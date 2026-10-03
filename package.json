@@ -1,0 +1,23 @@
+{
+  "name": "facebook-event-scraper",
+  "version": "1.0.0",
+  "description": "Weekly Facebook event digest scraper",
+  "main": "scraper.js",
+  "scripts": {
+    "auth": "node auth-facebook-session.js",
+    "scrape": "node scraper.js",
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://localhost:26831/MubtasimSajid/facebook-event-scraper"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^18.0.5",
+    "nodemailer": "^10.0.14",
+    "playwright": "^1.63.0"
+  }
+}
