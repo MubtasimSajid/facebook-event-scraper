@@ -75,7 +75,10 @@ function cleanEventName(name) {
     return null;
   }
 
-  const cleaned = name.replace(/\s+/g, " ").trim();
+  const cleaned = String(name)
+    .replace(/^profile photo of\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
   if (!cleaned) {
     return null;
@@ -152,12 +155,19 @@ async function collectEventsFromSearchResults(page) {
       }
     }
 
+    function normalizeCandidate(name) {
+      return String(name || "")
+        .replace(/^profile photo of\s+/i, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
     function getCandidateName(anchor) {
       const ariaLabel = cleanText(anchor.getAttribute("aria-label"));
       const titleAttribute = cleanText(anchor.getAttribute("title"));
       const anchorText = cleanText(anchor.innerText || anchor.textContent);
 
-      return ariaLabel || titleAttribute || anchorText;
+      return normalizeCandidate(ariaLabel || titleAttribute || anchorText);
     }
 
     const results = [];
@@ -175,11 +185,28 @@ async function collectEventsFromSearchResults(page) {
         const parent = anchor.parentElement;
 
         if (parent) {
-          name = cleanText(parent.innerText || parent.textContent);
+          name = normalizeCandidate(
+            cleanText(parent.innerText || parent.textContent),
+          );
         }
       }
 
       if (!name) {
+        continue;
+      }
+
+      const genericNames = new Set([
+        "events",
+        "event",
+        "see more",
+        "learn more",
+        "interested",
+        "going",
+        "share",
+        "facebook",
+      ]);
+
+      if (genericNames.has(name.toLowerCase())) {
         continue;
       }
 
@@ -201,15 +228,16 @@ function dedupeEvents(events) {
 
   for (const event of events) {
     const link = normalizeEventLink(event.link);
+    const name = cleanEventName(event.name);
 
-    if (!link || seen.has(link)) {
+    if (!link || !name || seen.has(link)) {
       continue;
     }
 
     seen.add(link);
 
     deduped.push({
-      name: event.name,
+      name,
       link,
     });
   }
