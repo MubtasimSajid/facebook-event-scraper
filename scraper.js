@@ -28,7 +28,7 @@ const TECH_KEYWORDS = [
   'technology competition',
 ];
 
-const AUTH_BLOCK_PATTERNS = [/\/login/i, /checkpoint/i, /captcha/i, /suspicious/i, /reauth/i, /two_factor/i];
+const AUTH_BLOCK_PATH_PATTERN = /\/(login|checkpoint|recover)(\/|$|\?)/i;
 
 function getConfig() {
   return {
@@ -102,22 +102,22 @@ async function extractJsonLdEvent(page) {
   });
 }
 
-function hasAuthOrChallengeIssue(url, pageText) {
-  if (AUTH_BLOCK_PATTERNS.some((pattern) => pattern.test(url))) return true;
-  const text = (pageText || '').toLowerCase();
+function hasAuthOrChallengeIssue(url, pageTitle) {
+  if (AUTH_BLOCK_PATH_PATTERN.test(url || '')) return true;
+  const title = (pageTitle || '').toLowerCase();
   return (
-    text.includes('security check') ||
-    text.includes('suspicious login') ||
-    text.includes('enter the code we sent') ||
-    text.includes('captcha')
+    title.includes('security check') ||
+    title.includes('suspicious login') ||
+    title.includes('code verification') ||
+    title.includes('captcha')
   );
 }
 
 async function assertAuthenticated(page) {
   await delay(1500);
   const currentUrl = page.url();
-  const text = await page.textContent('body').catch(() => '');
-  if (hasAuthOrChallengeIssue(currentUrl, text)) {
+  const pageTitle = await page.title().catch(() => '');
+  if (hasAuthOrChallengeIssue(currentUrl, pageTitle)) {
     throw new Error('Authentication challenge detected (login/checkpoint/captcha).');
   }
 }
@@ -293,20 +293,28 @@ async function run() {
   }
 }
 
-run().catch(async (error) => {
-  const config = getConfig();
+if (require.main === module) {
+  run().catch(async (error) => {
+    const config = getConfig();
 
-  if (config.smtpHost && config.smtpUser && config.smtpPassword && config.emailTo) {
-    try {
-      await sendEmail(
-        config,
-        `Facebook Event Digest Error - ${new Date().toISOString().slice(0, 10)}`,
-        `The scraper stopped because of an error:\n\n${error.message}`,
-      );
-    } catch {
-      // ignore secondary email errors
+    console.error(error.message);
+
+    if (config.smtpHost && config.smtpUser && config.smtpPassword && config.emailTo) {
+      try {
+        await sendEmail(
+          config,
+          `Facebook Event Digest Error - ${new Date().toISOString().slice(0, 10)}`,
+          `The scraper stopped because of an error:\n\n${error.message}`,
+        );
+      } catch {
+        // ignore secondary email errors
+      }
     }
-  }
 
-  process.exitCode = 1;
-});
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  hasAuthOrChallengeIssue,
+};
