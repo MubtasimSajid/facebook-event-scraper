@@ -1,0 +1,17 @@
+node_modules/
+.env
+.env.*
+!.env.example
+facebook-storage-state.json
+playwright/.auth/
+playwright-report/
+test-results/
+trace.zip
+traces/
+logs/
+*.log
+screenshots/
+artifacts/
+.tmp/
+tmp/
+.browser-profile/
