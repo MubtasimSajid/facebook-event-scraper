@@ -1,6 +1,6 @@
 # Scraper for Facebook events
 
-Small Facebook event digest app that runs weekly & emails them.
+Small Facebook event digest app that runs weekly & emails them. Specialized for CSE-native competitions in Bangladesh.
 
 ## Local setup
 
