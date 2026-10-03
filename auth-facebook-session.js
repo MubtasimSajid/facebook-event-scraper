@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const readline = require('node:readline/promises');
 const { stdin: input, stdout: output } = require('node:process');
-const { chromium } = require('playwright');
+const { firefox } = require('playwright');
 
 const storageStatePath = process.env.FACEBOOK_STORAGE_STATE_PATH || 'facebook-storage-state.json';
 
@@ -18,7 +18,7 @@ function looksUnauthenticated(url, pageText) {
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: false });
+  const browser = await firefox.launch({ headless: false });
   const context = await browser.newContext();
   const page = await context.newPage();
 
