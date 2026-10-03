@@ -5,6 +5,9 @@ on:
     - cron: '0 12 * * 5'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   scrape-and-email:
     runs-on: ubuntu-latest
