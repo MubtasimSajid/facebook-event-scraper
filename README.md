@@ -1,6 +1,6 @@
-# facebook-event-scraper
+# Scraper for Facebook events
 
-Small Facebook event digest app that runs weekly and emails upcoming Bangladesh public technical competition events, sorted by proximity to Dhaka.
+Small Facebook event digest app that runs weekly & emails them (specialized for upcoming Bangladesh public technical competition events, sorted by proximity to Dhaka to better fit my needs).
 
 ## Local setup
 
@@ -10,7 +10,7 @@ Small Facebook event digest app that runs weekly and emails upcoming Bangladesh 
    npm install
    ```
 
-2. Copy the example env file and fill in your values:
+2. Copy the example env file & fill in your values:
 
    ```bash
    cp .env.example .env
@@ -35,10 +35,10 @@ Small Facebook event digest app that runs weekly and emails upcoming Bangladesh 
 - Workflow: `.github/workflows/weekly-facebook-event-digest.yml`
 - Schedule: every Friday at 6:00 PM Bangladesh time (12:00 UTC)
 - Authentication: set `FACEBOOK_STORAGE_STATE_B64` secret with base64 of your local `facebook-storage-state.json`.
-- SMTP credentials and destination email are provided through repository secrets.
+- SMTP credentials & destination email are provided through repository secrets.
 
 ## Notes
 
-- The scheduled job reuses the saved authenticated session and does not require a Facebook password.
-- If login checkpoints, CAPTCHA, or re-authentication pages appear, the run stops and sends an error email.
-- Only public event details are collected: title, date/time, location, distance from Dhaka (if resolvable), and event link.
+- The scheduled job reuses the saved authenticated session & does not require a Facebook password.
+- If login checkpoints, CAPTCHA, or re-authentication pages appear, the run stops & sends an error email.
+- Only public event details are collected: title, date/time, location, distance from Dhaka (if resolvable), & event link.
