@@ -1,23 +1,21 @@
 # Facebook Event Scraper
 
-Small Node.js/Playwright app that searches Facebook Events for technology and programming-related events in Bangladesh and emails a weekly digest.
+Small Node.js/Playwright app that searches Facebook Events for technology & programming-related events in Bangladesh & emails a weekly digest.
 
-The scraper searches a set of CSE/technology-related keywords, collects Facebook event links, removes duplicates, and sends the results by email.
+The scraper searches a set of CSE/technology-related keywords, collects Facebook event links, removes duplicates & sends the results by email.
 
 ## How it works
 
 For each search keyword, the scraper:
 
-1. Searches Facebook Events for `<keyword> Bangladesh`.
-2. Loads the search results using an authenticated Firefox session.
-3. Scrolls through the results to load additional events.
-4. Extracts Facebook event links and candidate event names.
-5. Deduplicates events across all searches.
-6. Sends the resulting list by email.
+1. Searches Facebook Events for `<keyword> Bangladesh`
+2. Loads the search results using an authenticated Firefox session
+3. Scrolls through the results to load additional events
+4. Extracts Facebook event links & candidate event names
+5. Deduplicates events across all searches
+6. Sends the resulting list by email
 
-The search order, delays, and scrolling behavior are varied between searches so the scraper does not rely on one completely fixed sequence of actions.
-
-> **Note:** The scraper currently collects event names and Facebook event links. It does not yet reliably extract event dates, locations, or distances from Dhaka.
+The search order, delays & scrolling behavior are varied between searches so the scraper doesn't rely on one completely fixed sequence of actions.
 
 ## Search keywords
 
@@ -58,7 +56,7 @@ Copy the example environment file:
 cp .env.example .env
 ```
 
-Fill in the required SMTP configuration and email destination.
+Fill in the required SMTP configuration & email destination.
 
 ### 3. Create an authenticated Facebook session
 
@@ -76,7 +74,7 @@ Log in to Facebook manually, then press Enter in the terminal. The script saves 
 facebook-storage-state.json
 ```
 
-Keep this file private. It contains authenticated browser session information and should never be committed to Git.
+Keep this file private. It contains authenticated browser session information & should never be committed to Git.
 
 ### 4. Run the scraper
 
@@ -84,7 +82,7 @@ Keep this file private. It contains authenticated browser session information an
 npm run scrape
 ```
 
-The scraper will search Facebook Events and send the resulting digest to the configured email address.
+The scraper will search Facebook Events & send the resulting digest to the configured email address.
 
 ### 5. Run tests
 
@@ -109,15 +107,15 @@ It runs every Friday at:
 
 The workflow:
 
-- Installs Node.js dependencies.
-- Installs Firefox for Playwright.
-- Restores the authenticated Facebook session from a GitHub secret.
-- Runs the scraper.
-- Sends the resulting digest by email.
+- Installs Node.js dependencies
+- Installs Firefox for Playwright
+- Restores the authenticated Facebook session from a GitHub secret
+- Runs the scraper
+- Sends the resulting digest by email
 
 ### Required GitHub secrets
 
-The workflow requires the Facebook session state and SMTP configuration to be stored as repository secrets.
+The workflow requires the Facebook session state & SMTP configuration to be stored as repository secrets.
 
 The Facebook session is provided through:
 
@@ -125,7 +123,7 @@ The Facebook session is provided through:
 FACEBOOK_STORAGE_STATE_B64
 ```
 
-SMTP and destination-email configuration are also supplied through GitHub Actions secrets.
+SMTP & destination-email configuration are also supplied through GitHub Actions secrets.
 
 ## Authentication and failures
 
@@ -141,16 +139,6 @@ The scraper currently collects:
 
 - Event name
 - Facebook event URL
-
-It does not currently guarantee extraction of:
-
-- Event date/time
-- Event location
-- Distance from Dhaka
-- Organizer information
-- Event description
-
-These may be added in a future version.
 
 ## Project structure
 
