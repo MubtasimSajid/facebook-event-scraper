@@ -1,151 +1,189 @@
+"use strict";
+
 require("dotenv").config();
 
-const fs = require("fs");
 const nodemailer = require("nodemailer");
 const { firefox } = require("playwright");
 
 const SEARCH_KEYWORDS = [
-  "programming contest",
-  "competitive programming",
-  "coding contest",
-  "hackathon",
-  "datathon",
-  "icpc",
-  "robotics competition",
-  "artificial intelligence",
-  "machine learning",
-  "cybersecurity",
-  "software competition",
-  "informatics olympiad",
-  "algorithm competition",
-  "technology competition",
+  "Programming Contest",
+  "Competitive Programming",
+  "Coding Contest",
+  "Hackathon",
+  "Datathon",
+  "ICPC",
+  "Robotics Competition",
+  "Artificial Intelligence",
+  "Machine Learning",
+  "Cybersecurity",
+  "Software Competition",
+  "Informatics Olympiad",
+  "Algorithm Competition",
+  "Technology Competition",
 ];
 
-function getConfig() {
-  return {
-    emailTo: process.env.EMAIL_TO,
-    smtpHost: process.env.SMTP_HOST,
-    smtpPort: Number(process.env.SMTP_PORT || 465),
-    smtpUser: process.env.SMTP_USER,
-    smtpPassword: process.env.SMTP_PASSWORD,
-    storageStatePath:
-      process.env.FACEBOOK_STORAGE_STATE_PATH || "facebook-storage-state.json",
-  };
-}
+const CONFIG = {
+  storageState:
+    process.env.FACEBOOK_STORAGE_STATE || "facebook-storage-state.json",
+  recipient: process.env.EMAIL_TO,
+  maxEventsInEmail: Number(process.env.MAX_EVENTS_IN_EMAIL || 100),
 
-function validateConfig(config) {
-  const missing = [];
+  delays: {
+    beforeSearch: [1000, 2500],
+    afterSearch: [1000, 2500],
+    betweenSearches: [1500, 3500],
+    afterScroll: [900, 1800],
+  },
 
-  for (const key of ["emailTo", "smtpHost", "smtpUser", "smtpPassword"]) {
-    if (!config[key]) {
-      missing.push(key);
-    }
-  }
+  scrolling: {
+    minScrolls: 3,
+    maxScrolls: 6,
+    minDistance: 900,
+    maxDistance: 1800,
+  },
+};
+
+function validateConfig() {
+  const required = [
+    "EMAIL_TO",
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_USER",
+    "SMTP_PASS",
+  ];
+
+  const missing = required.filter((key) => !process.env[key]);
 
   if (missing.length > 0) {
     throw new Error(
       `Missing required environment variables: ${missing.join(", ")}`,
     );
   }
+
+  if (
+    !Number.isInteger(CONFIG.maxEventsInEmail) ||
+    CONFIG.maxEventsInEmail < 1
+  ) {
+    throw new Error("MAX_EVENTS_IN_EMAIL must be a positive integer.");
+  }
+}
+
+function randomInt(min, max) {
+  if (min > max) {
+    throw new Error(`Invalid random range: ${min} > ${max}`);
+  }
+
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function shuffle(items) {
+  const result = [...items];
+
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = randomInt(0, i);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+
+  return result;
 }
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function normalizeEventLink(link) {
-  if (!link) {
-    return null;
-  }
+async function randomDelay([min, max]) {
+  await delay(randomInt(min, max));
+}
 
+function normalizeEventUrl(url) {
   try {
-    const url = new URL(link, "https://www.facebook.com");
+    const parsed = new URL(url);
 
-    url.hash = "";
-    url.search = "";
+    parsed.search = "";
+    parsed.hash = "";
 
-    return url.toString().replace(/\/$/, "");
+    return parsed.toString();
   } catch {
     return null;
   }
 }
 
-function cleanEventName(name) {
-  if (!name) {
-    return null;
+function deduplicateEvents(events) {
+  const seen = new Set();
+  const result = [];
+
+  for (const event of events) {
+    const link = normalizeEventUrl(event.link);
+
+    if (!link || seen.has(link)) {
+      continue;
+    }
+
+    seen.add(link);
+
+    result.push({
+      name: event.name?.trim() || "Facebook Event",
+      link,
+    });
   }
 
-  const cleaned = String(name)
-    .replace(/^profile photo of\s+/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!cleaned) {
-    return null;
-  }
-
-  const genericNames = new Set([
-    "events",
-    "event",
-    "see more",
-    "learn more",
-    "interested",
-    "going",
-    "share",
-    "facebook",
-  ]);
-
-  if (genericNames.has(cleaned.toLowerCase())) {
-    return null;
-  }
-
-  return cleaned;
+  return result;
 }
 
-function hasAuthOrChallengeIssue(url, pageTitle) {
-  const currentUrl = url || "";
-  const normalizedTitle = (pageTitle || "").toLowerCase();
-
-  if (/\/(login|checkpoint|recover)(\/|$|\?)/i.test(currentUrl)) {
-    return true;
-  }
+function buildSearchUrl(keyword) {
+  const searchTerm = `${keyword} Bangladesh`;
 
   return (
-    normalizedTitle.includes("security check") ||
-    normalizedTitle.includes("suspicious login") ||
-    normalizedTitle.includes("code verification") ||
-    normalizedTitle.includes("captcha")
+    "https://www.facebook.com/events/search/?q=" +
+    encodeURIComponent(searchTerm)
   );
 }
 
 async function assertAuthenticated(page) {
-  await delay(1500);
+  const url = page.url();
 
-  const currentUrl = page.url();
-  const pageTitle = await page.title().catch(() => "");
+  const authenticationRequired =
+    /\/login|\/checkpoint|\/recover|\/security/i.test(url);
 
-  console.log(`Facebook page URL: ${currentUrl}`);
-  console.log(`Facebook page title: ${pageTitle}`);
+  if (authenticationRequired) {
+    throw new Error(`Facebook authentication is required. Current URL: ${url}`);
+  }
 
-  if (hasAuthOrChallengeIssue(currentUrl, pageTitle)) {
-    throw new Error(
-      "Authentication challenge detected (login/checkpoint/captcha).",
-    );
+  await page.waitForTimeout(1000);
+
+  const title = await page.title();
+
+  if (/log in|login/i.test(title)) {
+    throw new Error("Facebook authentication appears to have expired.");
   }
 }
 
 async function collectEventsFromSearchResults(page) {
-  for (let i = 0; i < 4; i += 1) {
-    await page.mouse.wheel(0, 1500);
-    await delay(1200);
+  const scrollCount = randomInt(
+    CONFIG.scrolling.minScrolls,
+    CONFIG.scrolling.maxScrolls,
+  );
+
+  for (let i = 0; i < scrollCount; i += 1) {
+    const distance = randomInt(
+      CONFIG.scrolling.minDistance,
+      CONFIG.scrolling.maxDistance,
+    );
+
+    await page.mouse.wheel(0, distance);
+    await randomDelay(CONFIG.delays.afterScroll);
   }
 
-  const events = await page.evaluate(() => {
+  await randomDelay(CONFIG.delays.afterSearch);
+
+  return page.evaluate(() => {
     function cleanText(value) {
-      return value ? value.replace(/\s+/g, " ").trim() : "";
+      return String(value || "")
+        .replace(/\s+/g, " ")
+        .trim();
     }
 
-    function isEventDetailUrl(href) {
+    function isEventUrl(href) {
       try {
         const url = new URL(href, window.location.origin);
 
@@ -155,221 +193,153 @@ async function collectEventsFromSearchResults(page) {
       }
     }
 
-    function normalizeCandidate(name) {
-      return String(name || "")
-        .replace(/^profile photo of\s+/i, "")
-        .replace(/\s+/g, " ")
-        .trim();
-    }
-
-    function getCandidateName(anchor) {
+    function getName(anchor) {
       const ariaLabel = cleanText(anchor.getAttribute("aria-label"));
-      const titleAttribute = cleanText(anchor.getAttribute("title"));
-      const anchorText = cleanText(anchor.innerText || anchor.textContent);
+      const title = cleanText(anchor.getAttribute("title"));
+      const text = cleanText(anchor.innerText || anchor.textContent);
 
-      return normalizeCandidate(ariaLabel || titleAttribute || anchorText);
+      return ariaLabel || title || text;
     }
 
-    const results = [];
+    const events = [];
 
     for (const anchor of document.querySelectorAll("a[href]")) {
       const href = anchor.href;
 
-      if (!isEventDetailUrl(href)) {
+      if (!isEventUrl(href)) {
         continue;
       }
 
-      let name = getCandidateName(anchor);
-
-      if (!name) {
-        const parent = anchor.parentElement;
-
-        if (parent) {
-          name = normalizeCandidate(
-            cleanText(parent.innerText || parent.textContent),
-          );
-        }
-      }
+      const name = getName(anchor);
 
       if (!name) {
         continue;
       }
 
-      const genericNames = new Set([
-        "events",
-        "event",
-        "see more",
-        "learn more",
-        "interested",
-        "going",
-        "share",
-        "facebook",
-      ]);
-
-      if (genericNames.has(name.toLowerCase())) {
-        continue;
-      }
-
-      results.push({
+      events.push({
         name,
         link: href,
       });
     }
 
-    return results;
+    return events;
   });
-
-  return events;
-}
-
-function dedupeEvents(events) {
-  const seen = new Set();
-  const deduped = [];
-
-  for (const event of events) {
-    const link = normalizeEventLink(event.link);
-    const name = cleanEventName(event.name);
-
-    if (!link || !name || seen.has(link)) {
-      continue;
-    }
-
-    seen.add(link);
-
-    deduped.push({
-      name,
-      link,
-    });
-  }
-
-  return deduped;
 }
 
 function buildDigestBody(events) {
   if (events.length === 0) {
-    return "No events were found in the Facebook search results this week.";
+    return [
+      "No Facebook events were found.",
+      "",
+      "The scraper completed successfully but did not find any matching events.",
+    ].join("\n");
   }
 
-  return [
+  const lines = [
     `Found ${events.length} Facebook event${events.length === 1 ? "" : "s"}:`,
     "",
-    ...events.flatMap((event, index) => [
-      `${index + 1}. ${event.name}`,
-      event.link,
-      "",
-    ]),
-  ].join("\n");
+  ];
+
+  events.forEach((event, index) => {
+    lines.push(`${index + 1}. ${event.name}`);
+    lines.push(`   ${event.link}`);
+    lines.push("");
+  });
+
+  return lines.join("\n").trim();
 }
 
-async function sendEmail(config, subject, body) {
-  const transporter = nodemailer.createTransport({
-    host: config.smtpHost,
-    port: config.smtpPort,
-    secure: config.smtpPort === 465,
+function createTransporter() {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT),
+    secure: process.env.SMTP_SECURE === "true",
     auth: {
-      user: config.smtpUser,
-      pass: config.smtpPassword,
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
     },
   });
+}
+
+async function sendDigest(events) {
+  const transporter = createTransporter();
+
+  const limitedEvents = events.slice(0, CONFIG.maxEventsInEmail);
 
   await transporter.sendMail({
-    from: config.smtpUser,
-    to: config.emailTo,
-    subject,
-    text: body,
+    from: process.env.EMAIL_FROM || process.env.SMTP_USER,
+    to: CONFIG.recipient,
+    subject: `Facebook Event Digest — ${limitedEvents.length} event${
+      limitedEvents.length === 1 ? "" : "s"
+    }`,
+    text: buildDigestBody(limitedEvents),
   });
 }
 
-async function run() {
-  const config = getConfig();
-
-  validateConfig(config);
-
-  if (!fs.existsSync(config.storageStatePath)) {
-    throw new Error(
-      `Storage state file not found at ${config.storageStatePath}.`,
-    );
-  }
+async function scrape() {
+  validateConfig();
 
   const browser = await firefox.launch({
     headless: true,
   });
 
-  const context = await browser.newContext({
-    storageState: config.storageStatePath,
-  });
-
-  const page = await context.newPage();
-
   try {
+    const context = await browser.newContext({
+      storageState: CONFIG.storageState,
+    });
+
+    const page = await context.newPage();
+
+    const keywords = shuffle(SEARCH_KEYWORDS);
     const discoveredEvents = [];
 
-    for (const keyword of SEARCH_KEYWORDS) {
+    console.log(`Searching ${keywords.length} keywords...`);
+
+    for (const keyword of keywords) {
       const searchTerm = `${keyword} Bangladesh`;
 
-      const searchUrl =
-        `https://www.facebook.com/events/search/?q=` +
-        `${encodeURIComponent(searchTerm)}`;
+      console.log(`Searching: ${searchTerm}`);
 
-      console.log(`Searching Facebook for: ${searchTerm}`);
-
-      await page.goto(searchUrl, {
+      await page.goto(buildSearchUrl(keyword), {
         waitUntil: "domcontentloaded",
-        timeout: 60000,
+        timeout: 60_000,
       });
 
       await assertAuthenticated(page);
+      await randomDelay(CONFIG.delays.beforeSearch);
 
       const events = await collectEventsFromSearchResults(page);
 
-      console.log(`Found ${events.length} event link(s) for "${searchTerm}".`);
+      console.log(`Found ${events.length} result(s).`);
 
       discoveredEvents.push(...events);
 
-      await delay(1500);
+      await randomDelay(CONFIG.delays.betweenSearches);
     }
 
-    const finalEvents = dedupeEvents(discoveredEvents);
+    const events = deduplicateEvents(discoveredEvents);
 
-    console.log(`Total unique events found: ${finalEvents.length}`);
+    console.log(`Collected ${events.length} unique event(s).`);
 
-    const body = buildDigestBody(finalEvents);
-
-    await sendEmail(
-      config,
-      `Facebook Event Digest - ${new Date().toISOString().slice(0, 10)}`,
-      body,
-    );
+    await sendDigest(events);
 
     console.log("Digest email sent successfully.");
   } finally {
-    await context.close();
     await browser.close();
   }
 }
 
-run().catch(async (error) => {
-  const config = getConfig();
+if (require.main === module) {
+  scrape().catch((error) => {
+    console.error("Scraper failed:", error);
+    process.exitCode = 1;
+  });
+}
 
-  if (
-    config.smtpHost &&
-    config.smtpUser &&
-    config.smtpPassword &&
-    config.emailTo
-  ) {
-    try {
-      await sendEmail(
-        config,
-        `Facebook Event Digest Error - ${new Date()
-          .toISOString()
-          .slice(0, 10)}`,
-        `The scraper stopped because of an error:\n\n${error.message}`,
-      );
-    } catch {
-      // Ignore secondary email errors.
-    }
-  }
-
-  console.error(error.message);
-  process.exitCode = 1;
-});
+module.exports = {
+  randomInt,
+  shuffle,
+  normalizeEventUrl,
+  deduplicateEvents,
+  buildSearchUrl,
+};

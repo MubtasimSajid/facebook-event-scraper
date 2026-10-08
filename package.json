@@ -1,23 +1,28 @@
 {
   "name": "facebook-event-scraper",
   "version": "1.0.0",
-  "description": "Weekly Facebook event digest scraper",
+  "description": "Search Facebook Events for technology-related events in Bangladesh and send a weekly email digest.",
   "main": "scraper.js",
   "scripts": {
-    "auth": "node auth-facebook-session.js",
     "scrape": "node scraper.js",
+    "auth": "node auth.js",
     "test": "node --test"
   },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "nodemailer": "^6.9.16",
+    "playwright": "^1.51.1"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "http://localhost:26831/MubtasimSajid/facebook-event-scraper"
+    "url": "https://github.com/MubtasimSajid/facebook-event-scraper.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "dotenv": "^18.0.5",
-    "nodemailer": "^10.0.14",
-    "playwright": "^1.63.0"
-  }
+  "bugs": {
+    "url": "https://github.com/MubtasimSajid/facebook-event-scraper/issues"
+  },
+  "homepage": "https://github.com/MubtasimSajid/facebook-event-scraper"
 }
