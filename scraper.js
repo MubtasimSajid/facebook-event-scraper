@@ -212,7 +212,9 @@ async function collectEventsFromSearchResults(page) {
       const title = cleanText(anchor.getAttribute("title"));
       const text = cleanText(anchor.innerText || anchor.textContent);
 
-      return ariaLabel || title || text;
+      return (ariaLabel || title || text)
+        .replace(/^profile photo of\s+/i, "")
+        .trim();
     }
 
     const events = [];
