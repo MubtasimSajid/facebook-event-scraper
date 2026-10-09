@@ -163,19 +163,10 @@ function hasAuthOrChallengeIssue(url, title) {
 async function assertAuthenticated(page) {
   const url = page.url();
 
-  const authenticationRequired =
-    /\/login|\/checkpoint|\/recover|\/security/i.test(url);
-
-  if (authenticationRequired) {
-    throw new Error(`Facebook authentication is required. Current URL: ${url}`);
-  }
-
-  await page.waitForTimeout(1000);
-
-  const title = await page.title();
-
-  if (/log in|login/i.test(title)) {
-    throw new Error("Facebook authentication appears to have expired.");
+  if (hasAuthOrChallengeIssue(url, title)) {
+    throw new Error(
+      `Facebook authentication is required or a security challenge was detected. Current URL: ${url}`,
+    );
   }
 }
 
