@@ -162,6 +162,8 @@ function hasAuthOrChallengeIssue(url, title) {
 
 async function assertAuthenticated(page) {
   const url = page.url();
+  await page.waitForTimeout(1000);
+  const title = await page.title();
 
   if (hasAuthOrChallengeIssue(url, title)) {
     throw new Error(
