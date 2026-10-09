@@ -139,6 +139,27 @@ function buildSearchUrl(keyword) {
   );
 }
 
+function hasAuthOrChallengeIssue(url, title) {
+  let parsedUrl;
+
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return false;
+  }
+
+  const authenticationPath =
+    /\/(?:login|checkpoint|recover|security)(?:\/|$)/i.test(parsedUrl.pathname);
+
+  if (authenticationPath) {
+    return true;
+  }
+
+  return /security check|suspicious login attempt|code verification required|solve captcha/i.test(
+    String(title || ""),
+  );
+}
+
 async function assertAuthenticated(page) {
   const url = page.url();
 
@@ -342,4 +363,5 @@ module.exports = {
   normalizeEventUrl,
   deduplicateEvents,
   buildSearchUrl,
+  hasAuthOrChallengeIssue,
 };
